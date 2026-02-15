@@ -7,4 +7,13 @@ const transporter = nodemailer.createTransport({
       pass: process.env.SMTP_PASS
     }
 });
+
+transporter.verify((error, success) => {
+  if (error) {
+    console.log('Email transporter error:', error);
+  } else {
+    console.log('Email transporter is ready');
+  }
+});
+
 export default transporter;

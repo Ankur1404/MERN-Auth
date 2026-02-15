@@ -10,13 +10,18 @@ export const sendEmail = async ({ to, subject, type, data }) => {
 
     const html = emailTemplates[type](data);
 
-    await transporter.sendMail({
+    const result = await transporter.sendMail({
+      from: process.env.SMTP_USER,
       to,
       subject,
       html,
     });
 
+    console.log("Email sent successfully:", result.messageId);
+    return result;
+
   } catch (error) {
     console.error("Email failed:", error.message);
+    throw error;
   }
 };

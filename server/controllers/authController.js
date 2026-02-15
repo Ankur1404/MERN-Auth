@@ -36,12 +36,17 @@ export const register = async (req, res) => {
     await user.save();
 
     // Send OTP email
-    await sendEmail({
-      to: email,
-      subject: "Verify Your Email",
-      type: "verifyOtp",
-      data: { name, otp },
-    });
+    try {
+      await sendEmail({
+        to: email,
+        subject: "Verify Your Email",
+        type: "verifyOtp",
+        data: { name, otp },
+      });
+    } catch (emailError) {
+      console.error("OTP email failed to send:", emailError);
+      // Continue anyway - OTP is saved in DB
+    }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -150,12 +155,17 @@ export const sendOtp = async (req, res) => {
     user.verifyOtpExpiry = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    sendEmail({
-      to: user.email,
-      subject: "Your OTP Code",
-      type: "verifyOtp",
-      data: { name: user.name, otp },
-    });
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Your OTP Code",
+        type: "verifyOtp",
+        data: { name: user.name, otp },
+      });
+    } catch (emailError) {
+      console.error("OTP email failed to send:", emailError);
+      return res.status(500).json({ success: false, message: "Failed to send OTP email" });
+    }
     res.status(200).json({ success: true, message: "OTP sent to email" });
   } catch (error) {
     console.log(error);
@@ -202,12 +212,18 @@ export const verifyEmailWithOtp = async (req, res) => {
     user.verifyOtpExpiry = undefined;
 
     await user.save();
-    await sendEmail({
-      to: user.email,
-      subject: "Welcome to Our App!",
-      type: "welcome",
-      data: { name: user.name },
-    });
+    
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Welcome to Our App!",
+        type: "welcome",
+        data: { name: user.name },
+      });
+    } catch (emailError) {
+      console.error("Welcome email failed to send:", emailError);
+      // Don't fail verification if welcome email fails
+    }
 
     return res.status(200).json({
       success: true,
@@ -257,12 +273,18 @@ export const sendPasswordResetOtp = async (req, res) => {
     user.resetOtp = otp;
     user.resetOtpExpiry = Date.now() + 10 * 60 * 1000;
     await user.save();
-    sendEmail({
-      to: user.email,
-      subject: "Your Password Reset OTP",
-      type: "resetOtp",
-      data: { name: user.name, otp },
-    });
+    
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Your Password Reset OTP",
+        type: "resetOtp",
+        data: { name: user.name, otp },
+      });
+    } catch (emailError) {
+      console.error("Reset OTP email failed to send:", emailError);
+      return res.status(500).json({ success: false, message: "Failed to send reset OTP email" });
+    }
     res
       .status(200)
       .json({ success: true, message: "Password reset OTP sent to email" });
