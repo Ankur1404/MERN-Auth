@@ -344,7 +344,7 @@ export const googleAuthCallback = async (req, res) => {
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-    res.redirect(`${frontendUrl}/oauth-success`);
+    res.redirect(frontendUrl);
   }catch(error){
         console.error("Google OAuth callback error:", error);
         const frontendUrl = process.env.NODE_ENV === 'production' 
