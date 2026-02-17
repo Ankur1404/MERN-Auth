@@ -3,7 +3,8 @@ import cors from "cors";
 import "dotenv/config";
 import cookieParser from "cookie-parser";
 import connectDB from "./config/mongodb.js";
-
+import passport from "passport";
+import "./config/passport.js";
 import authRouter from "./routes/authRoutes.js";
 import userRouter from "./routes/userRoutes.js";
 const app = express();
@@ -24,7 +25,7 @@ app.use(
     credentials: true,
   }),
 );
-
+app.use(passport.initialize());
 app.get("/", (req, res) => {
   res.send("Hello, code!");
 }); 

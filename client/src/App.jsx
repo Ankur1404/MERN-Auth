@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Header from './components/Navbar'
 import EmailVerify from './pages/EmailVerify'
 import ResetPassword from './pages/ResetPassword'
+import OAuthSuccess from './pages/OAuthSuccess'
 import {ToastContainer} from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
@@ -20,6 +21,7 @@ const App = () => {
           <Route path='/login' element={<Login />} />
           <Route path='/email-verify' element={<EmailVerify />} />
           <Route path='/reset-password' element={<ResetPassword />} />
+          <Route path='/oauth-success' element={<OAuthSuccess />} />
         </Routes>
       </main>
     </div>

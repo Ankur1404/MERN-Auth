@@ -142,6 +142,24 @@ const Login = () => {
             {isSignup ? "Sign up" : "Login"}
           </button>
         </form>
+
+        <div className="mt-6">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">or</span>
+            </div>
+          </div>
+          <a
+            href={`${backendurl}/api/auth/google`}
+            className="w-full bg-white border-2 border-gray-300 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm cursor-pointer flex items-center justify-center gap-2"
+          >
+            <span>🔵</span>
+            <span>{isSignup ? "Sign up" : "Login"} with Google</span>
+          </a>
+        </div>
       </div>
     </div>
   );

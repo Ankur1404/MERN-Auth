@@ -54,7 +54,7 @@ export const register = async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.status(201).json({
@@ -105,7 +105,7 @@ export const login = async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res
@@ -122,7 +122,7 @@ export const logout = async (req, res) => {
     res.clearCookie("token", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     });
     return res
       .status(200)
@@ -329,3 +329,27 @@ export const resetPasswordWithOtp = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+
+
+export const googleAuthCallback = async (req, res) => {
+  try{
+    const frontendUrl = process.env.NODE_ENV === 'production' 
+      ? process.env.PRODUCTION_FRONTEND_URL 
+      : process.env.FRONTEND_URL;
+    const token = jwt.sign({ userId: req.user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.redirect(`${frontendUrl}/oauth-success`);
+  }catch(error){
+        console.error("Google OAuth callback error:", error);
+        const frontendUrl = process.env.NODE_ENV === 'production' 
+          ? process.env.PRODUCTION_FRONTEND_URL 
+          : process.env.FRONTEND_URL;
+        res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+    }
+};  

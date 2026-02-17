@@ -50,7 +50,11 @@ export const AuthContextProvider = ({ children }) => {
     userData,
     setUserData,
     getUserProfile,
+    getAuthStatus,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+
+export default AuthContextProvider;
