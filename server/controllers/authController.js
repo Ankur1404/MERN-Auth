@@ -26,7 +26,7 @@ export const register = async (req, res) => {
     });
 
     await user.save();
-
+    
     // Generate OTP immediately
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -34,21 +34,7 @@ export const register = async (req, res) => {
     user.verifyOtpExpiry = Date.now() + 10 * 60 * 1000;
 
     await user.save();
-
-    // Send OTP email
-    try {
-      await sendEmail({
-        to: email,
-        subject: "Verify Your Email",
-        type: "verifyOtp",
-        data: { name, otp },
-      });
-    } catch (emailError) {
-      console.error("OTP email failed to send:", emailError);
-      // Continue anyway - OTP is saved in DB
-    }
-
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
     res.cookie("token", token, {
@@ -61,6 +47,20 @@ export const register = async (req, res) => {
       success: true,
       message: "User registered successfully",
     });
+    // Send OTP email
+    try {
+      await sendEmail({
+        to: email,
+        subject: "Verify Your Email",
+        type: "verifyOtp",
+        data: { name, otp },
+      });
+    } catch (emailError) {
+      console.error("OTP email failed to send:", emailError);
+      
+    }
+
+   
 
     // sendEmail({
     //   to: email,
