@@ -40,9 +40,13 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  refreshToken: {
+    type: String,
+    default: ''
+  }
 });
 
 
 
-const userModel = mongoose.model.user || mongoose.model("user", userSchema);
+const userModel = mongoose.models.user || mongoose.model("user", userSchema);
 export default userModel;

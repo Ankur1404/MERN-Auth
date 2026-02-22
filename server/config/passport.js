@@ -28,8 +28,8 @@ passport.use(new GoogleStrategy({
         {
           user = await User.create({
             name: profile.displayName,
-            email: profile.emails[0].value,
-            avatar: profile.photos[0].value,
+            email: profile.emails[0].value || '',
+            avatar: profile.photos[0].value?.[0]?.value || '',
             googleId: profile.id,
             isVerified: isVerified
           })

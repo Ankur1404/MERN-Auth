@@ -2,7 +2,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
 import { sendEmail } from "../services/email.service.js";
+import { generateOtp } from "../utils/otp.utils.js";
+const OTP_ACTIVE = (process.env.OTP_ACTIVE || "").replace(/['"]/g, "").trim();
 
+// register user
 export const register = async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
@@ -18,31 +21,20 @@ export const register = async (req, res) => {
         .json({ success: false, message: "User already exists" });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
-
+    const otp = generateOtp();
+    const hashedOtp = await bcrypt.hash(otp, 10);
     const user = new userModel({
       name,
       email,
       password: hashedPassword,
+      verifyOtp: hashedOtp,
+      verifyOtpExpiry: Date.now() + 10 * 60 * 1000,
+      isVerified: false,
     });
 
     await user.save();
+
     
-    // Generate OTP immediately
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    user.verifyOtp = otp;
-    user.verifyOtpExpiry = Date.now() + 10 * 60 * 1000;
-
-    await user.save();
-     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
     res.status(201).json({
       success: true,
       message: "User registered successfully",
@@ -57,17 +49,7 @@ export const register = async (req, res) => {
       });
     } catch (emailError) {
       console.error("OTP email failed to send:", emailError);
-      
     }
-
-   
-
-    // sendEmail({
-    //   to: email,
-    //   subject: "Welcome to Our App!",
-    //   type: "welcome",
-    //   data: { name },
-    // });
   } catch (error) {
     console.error(error);
     res.status(500).json({
@@ -77,6 +59,7 @@ export const register = async (req, res) => {
   }
 };
 
+// login user
 export const login = async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -93,98 +76,150 @@ export const login = async (req, res) => {
         .status(400)
         .json({ success: false, message: "Invalid Credentials" });
     }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res
         .status(400)
         .json({ success: false, message: "Incorrect Credentials" });
     }
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    res.cookie("token", token, {
+
+    if (!user.isVerified) {
+      return res.status(403).json({
+        success: false,
+        message: "Email not verified",
+        isVerified: false,
+      });
+    }
+    const accessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: "2m",
+      },
+    );
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET,
+      {
+        expiresIn: "1d",
+      },
+    );
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    user.refreshToken = hashedRefreshToken;
+    await user.save();
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 24 * 60 * 60 * 1000,
     });
-    res
-      .status(200)
-      .json({ success: true, message: "User logged in successfully" });
+    res.status(200).json({
+      success: true,
+      message: "User logged in successfully",
+      accessToken,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// logout user
 export const logout = async (req, res) => {
   try {
-    res.clearCookie("token", {
+    if (req.userId) {
+      await userModel.findByIdAndUpdate(req.userId, {
+        refreshToken: ""
+      });
+    }
+
+    res.clearCookie("refreshToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     });
-    return res
-      .status(200)
-      .json({ success: true, message: "User logged out successfully" });
+
+    return res.status(200).json({
+      success: true,
+      message: "User logged out successfully"
+    });
+
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
 
+// send otp to email for verification
 export const sendOtp = async (req, res) => {
   try {
-    const user = await userModel.findById(req.userId);
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
+    }
+
+    const user = await userModel.findOne({ email });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "User not found"
       });
     }
 
     if (user.isVerified) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Account already verified" });
+      return res.status(400).json({
+        success: false,
+        message: "Account already verified"
+      });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.verifyOtp = otp;
+    const otp = generateOtp();
+    user.verifyOtp = await bcrypt.hash(otp, 10);
     user.verifyOtpExpiry = Date.now() + 10 * 60 * 1000;
+
     await user.save();
 
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Your OTP Code",
-        type: "verifyOtp",
-        data: { name: user.name, otp },
-      });
-    } catch (emailError) {
-      console.error("OTP email failed to send:", emailError);
-      return res.status(500).json({ success: false, message: "Failed to send OTP email" });
-    }
-    res.status(200).json({ success: true, message: "OTP sent to email" });
+    await sendEmail({
+      to: user.email,
+      subject: "Your OTP Code",
+      type: "verifyOtp",
+      data: { name: user.name, otp },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP resent successfully"
+    });
+
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
   }
 };
 
+// verify email with otp
 export const verifyEmailWithOtp = async (req, res) => {
   try {
-    const { otp } = req.body;
+    const { email, otp } = req.body;
 
-    if (!otp) {
+    if (!otp || !email) {
       return res.status(400).json({
         success: false,
         message: "Invalid verification request",
       });
     }
 
-    const user = await userModel.findById(req.userId);
+    const user = await userModel.findOne({ email });
 
     if (!user) {
       return res.status(404).json({
@@ -193,7 +228,7 @@ export const verifyEmailWithOtp = async (req, res) => {
       });
     }
 
-    if (!user.verifyOtp || user.verifyOtp !== otp) {
+    if (!user.verifyOtp) {
       return res.status(400).json({
         success: false,
         message: "Invalid OTP",
@@ -207,27 +242,57 @@ export const verifyEmailWithOtp = async (req, res) => {
       });
     }
 
+    const isOtpValid = await bcrypt.compare(otp, user.verifyOtp);
+
+    if (!isOtpValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    // Mark verified
     user.isVerified = true;
     user.verifyOtp = undefined;
     user.verifyOtpExpiry = undefined;
 
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "2m" },
+    );
+
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "1d" },
+    );
+
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+
+    user.refreshToken = hashedRefreshToken;
+
     await user.save();
-    
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Welcome to Our App!",
-        type: "welcome",
-        data: { name: user.name },
-      });
-    } catch (emailError) {
-      console.error("Welcome email failed to send:", emailError);
-      // Don't fail verification if welcome email fails
-    }
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    // Send welcome email (non-blocking)
+    sendEmail({
+      to: user.email,
+      subject: "Welcome to Our App!",
+      type: "welcome",
+      data: { name: user.name },
+    }).catch((err) => console.error("Welcome email failed:", err));
 
     return res.status(200).json({
       success: true,
-      message: "Email verified successfully",
+      accessToken,
     });
   } catch (error) {
     console.error(error);
@@ -238,6 +303,7 @@ export const verifyEmailWithOtp = async (req, res) => {
   }
 };
 
+// check is authenticated
 export const isAuthenticated = async (req, res) => {
   try {
     const user = await userModel.findById(req.userId).select("-password");
@@ -269,11 +335,11 @@ export const sendPasswordResetOtp = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User not found" });
     }
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.resetOtp = otp;
+    const otp = generateOtp();
+    user.resetOtp = await bcrypt.hash(otp, 10);
     user.resetOtpExpiry = Date.now() + 10 * 60 * 1000;
     await user.save();
-    
+
     try {
       await sendEmail({
         to: user.email,
@@ -283,7 +349,9 @@ export const sendPasswordResetOtp = async (req, res) => {
       });
     } catch (emailError) {
       console.error("Reset OTP email failed to send:", emailError);
-      return res.status(500).json({ success: false, message: "Failed to send reset OTP email" });
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to send reset OTP email" });
     }
     res
       .status(200)
@@ -310,16 +378,24 @@ export const resetPasswordWithOtp = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User not found" });
     }
-    if (user.resetOtp !== otp || user.resetOtp === "") {
+
+    if (!user.resetOtp) {
       return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
+
     if (user.resetOtpExpiry < Date.now()) {
       return res.status(400).json({ success: false, message: "OTP expired" });
     }
+    const isOtpValid = await bcrypt.compare(otp, user.resetOtp);
+    if (!isOtpValid) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.resetOtp = undefined;
     user.resetOtpExpiry = undefined;
+    user.refreshToken = "";
     await user.save();
     res
       .status(200)
@@ -330,26 +406,110 @@ export const resetPasswordWithOtp = async (req, res) => {
   }
 };
 
-
-
+// Google OAuth callback
 export const googleAuthCallback = async (req, res) => {
-  try{
-    const frontendUrl = process.env.NODE_ENV === 'production' 
-      ? process.env.PRODUCTION_FRONTEND_URL 
-      : process.env.FRONTEND_URL;
-    const token = jwt.sign({ userId: req.user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', token, {
+  try {
+    const frontendUrl =
+      process.env.NODE_ENV === "production"
+        ? process.env.PRODUCTION_FRONTEND_URL
+        : process.env.FRONTEND_URL;
+
+    const user = req.user;
+
+    const accessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "2m" },
+    );
+
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "1d" },
+    );
+
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    user.refreshToken = hashedRefreshToken;
+    await user.save();
+
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
     });
+
     res.redirect(frontendUrl);
-  }catch(error){
-        console.error("Google OAuth callback error:", error);
-        const frontendUrl = process.env.NODE_ENV === 'production' 
-          ? process.env.PRODUCTION_FRONTEND_URL 
-          : process.env.FRONTEND_URL;
-        res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+  } catch (error) {
+    console.error("Google OAuth callback error:", error);
+    const frontendUrl =
+      process.env.NODE_ENV === "production"
+        ? process.env.PRODUCTION_FRONTEND_URL
+        : process.env.FRONTEND_URL;
+    res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+  }
+};
+
+//Regenerating the access token using refresh token
+export const refreshAccessToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
-};  
+
+    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+
+    const user = await userModel.findById(decoded.userId);
+
+    if (!user || !user.refreshToken) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const isRefreshTokenValid = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken,
+    );
+
+    if (!isRefreshTokenValid) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const newAccessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "10s" },
+    );
+
+    const newRefreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "1d" },
+    );
+
+    const hashedNewRefreshToken = await bcrypt.hash(newRefreshToken, 10);
+
+    user.refreshToken = hashedNewRefreshToken;
+    await user.save();
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({ success: true, accessToken: newAccessToken });
+  } catch (error) {
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    });
+
+    res.status(401).json({
+      success: false,
+      message: "Invalid or expired refresh token",
+    });
+  }
+};

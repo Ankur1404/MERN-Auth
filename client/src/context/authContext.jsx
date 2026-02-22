@@ -2,8 +2,9 @@ import { createContext, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 export const AuthContext = createContext(null);
-
+import { useNavigate } from "react-router-dom";
 export const AuthContextProvider = ({ children }) => {
+  const navigate = useNavigate();
   const backendurl = import.meta.env.VITE_BACKEND_URL;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState(null);
@@ -33,6 +34,7 @@ export const AuthContextProvider = ({ children }) => {
     } catch (error) {
       setIsLoggedIn(false);
       toast.error(error?.response?.data?.message || "Auth check failed");
+      navigate("/login");
     }
   };
 
