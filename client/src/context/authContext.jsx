@@ -1,48 +1,86 @@
 import { createContext, useEffect, useState } from "react";
-import axios from "axios";
+// import axios from "axios";
 import { toast } from "react-toastify";
 export const AuthContext = createContext(null);
 import { useNavigate } from "react-router-dom";
+import axiosInstance from "../../services/axiosInstance";
+import { setAccessToken, clearAccessToken } from "../../utils/tokenStorage";
+
+const backendurl = import.meta.env.VITE_BACKEND_URL;
+
 export const AuthContextProvider = ({ children }) => {
   const navigate = useNavigate();
-  const backendurl = import.meta.env.VITE_BACKEND_URL;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState(null);
-//user-data
-  const getUserProfile = async () => {
-    try {
-      axios.defaults.withCredentials = true;
-      const { data } = await axios.get(backendurl + "/api/user/profile");
-      data.success
-        ? setUserData(data.user)
-        : toast.error(data.message || "Failed to load user");
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to load user");
+  const [isLoading, setIsLoading] = useState(true);
+
+
+  //user-data
+const getUserProfile = async () => {
+  try {
+    const { data } = await axiosInstance.get("/api/user/profile");
+
+    if (data.success) {
+      setUserData(data.user);
+      setIsLoggedIn(true);
+    } else {
+      toast.error(data.message || "Failed to load user");
     }
-  };
-//is-authenticated
-  const getAuthStatus = async () => {
+
+  } catch (error) {
+    clearAccessToken();
+    setIsLoggedIn(false);
+  }
+};
+  //is-authenticated
+  //   const getAuthStatus = async () => {
+  //     try {
+  //       axios.defaults.withCredentials = true;
+  //       const { data } = await axios.get(backendurl + "/api/auth/is-auth");
+  //       if (data.success) {
+  //         setIsLoggedIn(true);
+  //         getUserProfile();
+  //       } else {
+  //         setIsLoggedIn(false);
+  //       }
+  //     } catch (error) {
+  //       setIsLoggedIn(false);
+  //       toast.error(error?.response?.data?.message || "Auth check failed");
+  //       navigate("/login");
+  //     }
+  //   };
+
+  const silentRefresh = async () => {
     try {
-      axios.defaults.withCredentials = true;
-      const { data } = await axios.get(backendurl + "/api/auth/is-auth");
+      const { data } = await axiosInstance.post("/api/auth/refresh-token");
+
       if (data.success) {
+        setAccessToken(data.accessToken);
         setIsLoggedIn(true);
-        getUserProfile();
-      } else {
-        setIsLoggedIn(false);
+        await getUserProfile();
       }
     } catch (error) {
+      clearAccessToken();
       setIsLoggedIn(false);
-      toast.error(error?.response?.data?.message || "Auth check failed");
-      navigate("/login");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  
+  const logout = async () => {
+  try {
+    await axiosInstance.post("/api/auth/logout");
+  } catch (error) {}
 
+  clearAccessToken();
+  setIsLoggedIn(false);
+  setUserData(null);
+  setIsLoading(false);
+  navigate("/login");
+};
 
   useEffect(() => {
-    getAuthStatus();
+    silentRefresh();
   }, []);
 
   const value = {
@@ -52,11 +90,11 @@ export const AuthContextProvider = ({ children }) => {
     userData,
     setUserData,
     getUserProfile,
-    getAuthStatus,
+    logout,
+    // getAuthStatus,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{!isLoading && children}</AuthContext.Provider>;
 };
-
 
 export default AuthContextProvider;

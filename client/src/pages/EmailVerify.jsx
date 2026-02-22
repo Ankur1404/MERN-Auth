@@ -1,16 +1,17 @@
 import React, { useContext, useEffect, useState } from "react";
-import axios from "axios";
+// import axios from "axios";
+import axiosInstance from "../../services/axiosInstance";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/authContext";
+import { setAccessToken } from "../../utils/tokenStorage";
 
 const EmailVerify = () => {
   const [otp, setOtp] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
-
-  const { backendurl, getUserProfile, isLoggedIn, userData } =
-    useContext(AuthContext);
+  const email = localStorage.getItem("emailForVerification");
+  const { getUserProfile, setIsLoggedIn } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handlePaste = (e) => {
@@ -27,14 +28,21 @@ const EmailVerify = () => {
 
     try {
       setIsSubmitting(true);
-      axios.defaults.withCredentials = true;
-      const { data } = await axios.post(
-        `${backendurl}/api/auth/verify-email-with-otp`,
-        { otp },
+      if (!email) {
+        toast.error("Session expired. Please login again.");
+        navigate("/login");
+        return;
+      }
+      const { data } = await axiosInstance.post(
+        `/api/auth/verify-email-with-otp`,
+        { email, otp },
       );
       if (data.success) {
-        toast.success(data.message || "Email verified successfully");
+        setAccessToken(data.accessToken);
+        localStorage.removeItem("emailForVerification");
         await getUserProfile?.();
+        setIsLoggedIn(true);
+        toast.success(data.message || "Email verified successfully");
         navigate("/", { replace: true });
       } else {
         toast.error(data.message || "Verification failed");
@@ -48,9 +56,15 @@ const EmailVerify = () => {
 
   const handleResend = async () => {
     try {
+      if (!email) {
+        toast.error("Session expired. Please login again.");
+        navigate("/login");
+        return;
+      }
       setIsResending(true);
-      axios.defaults.withCredentials = true;
-      const { data } = await axios.post(`${backendurl}/api/auth/send-otp`);
+      const { data } = await axiosInstance.post(`/api/auth/send-otp`, {
+        email,
+      });
       if (data.success) {
         toast.success(data.message || "OTP sent to your email");
       } else {
@@ -64,16 +78,10 @@ const EmailVerify = () => {
   };
 
   useEffect(() => {
-    if (isLoggedIn === false) {
+    if (!email) {
       navigate("/login");
-      return;
     }
-
-    if (userData?.isVerified) {
-      navigate("/");
-    }
-  }, [isLoggedIn, userData?.isVerified, navigate]);
-
+  }, [email, navigate]);
   return (
     <div className="min-h-[calc(100vh-80px)] flex items-center justify-center bg-slate-50">
       <div className="w-full max-w-md bg-white shadow-md rounded-lg p-8">
@@ -81,7 +89,7 @@ const EmailVerify = () => {
           Verify your email
         </h1>
         <p className="text-sm text-slate-500 mb-6 text-center">
-          We&apos;ve sent a 6-digit code to your email. Enter it below to verify
+          We&apos;ve sent a 6-digit code to your <strong>{email}</strong>. Enter it below to verify
           your account.
         </p>
 

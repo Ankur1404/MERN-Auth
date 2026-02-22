@@ -1,8 +1,9 @@
 import React, { useContext, useState } from 'react'
-import axios from 'axios'
+import axiosInstance from '../../services/axiosInstance'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
-import { AuthContext } from '../context/authContext'
+
+
 
 const ResetPassword = () => {
   const [email, setEmail] = useState('')
@@ -12,7 +13,7 @@ const ResetPassword = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [step, setStep] = useState(1) // 1: email, 2: otp + password
 
-  const { backendurl } = useContext(AuthContext)
+
   const navigate = useNavigate()
 
   const handlePaste = (e) => {
@@ -29,9 +30,9 @@ const ResetPassword = () => {
 
     try {
       setIsSubmitting(true)
-      axios.defaults.withCredentials = true
-      const { data } = await axios.post(
-        `${backendurl}/api/auth/send-password-reset-otp`,
+      
+      const { data } = await axiosInstance.post(
+        `/api/auth/send-password-reset-otp`,
         { email }
       )
       if (data.success) {
@@ -62,9 +63,9 @@ const ResetPassword = () => {
 
     try {
       setIsSubmitting(true)
-      axios.defaults.withCredentials = true
-      const { data } = await axios.post(
-        `${backendurl}/api/auth/reset-password-with-otp`,
+      
+      const { data } = await axiosInstance.post(
+        `/api/auth/reset-password-with-otp`,
         { email, otp, newPassword }
       )
       if (data.success) {

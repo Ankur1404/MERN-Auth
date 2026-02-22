@@ -1,8 +1,10 @@
 import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/authContext";
-import axios from "axios";
+// import axios from "axios";
 import { toast } from "react-toastify";
+import axiosInstance from "../../services/axiosInstance";
+import { setAccessToken } from "../../utils/tokenStorage";
 
 const Login = () => {
   const [mode, setMode] = useState("login"); // 'login' | 'signup'
@@ -12,7 +14,7 @@ const Login = () => {
     password: "",
   });
   const navigate = useNavigate();
-  const { backendurl, setIsLoggedIn,getUserProfile } = useContext(AuthContext);
+  const { backendurl, setIsLoggedIn, getUserProfile } = useContext(AuthContext);
 
   const isSignup = mode === "signup";
 
@@ -24,38 +26,57 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      axios.defaults.withCredentials = true;
-
       if (mode === "signup") {
-        const { data } = await axios.post(`${backendurl}/api/auth/register`, {
+        const { data } = await axiosInstance.post(`/api/auth/register`, {
           name: form.name,
           email: form.email,
           password: form.password,
         });
 
         if (data.success) {
-          setIsLoggedIn(true);
-          await getUserProfile?.();
+          localStorage.setItem("emailForVerification", form.email);
+          toast.success(
+            data.message || "Signup successful. Please verify your email.",
+          );
           navigate("/email-verify");
         } else {
           toast.error(data.message || "Signup failed");
         }
       } else {
-        const { data } = await axios.post(`${backendurl}/api/auth/login`, {
+        const { data } = await axiosInstance.post(`/api/auth/login`, {
           email: form.email,
           password: form.password,
         });
 
         if (data.success) {
+          setAccessToken(data.accessToken);
           setIsLoggedIn(true);
-          getUserProfile()
+          await getUserProfile();
           navigate("/");
         } else {
           toast.error(data.message || "Login failed");
         }
       }
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Something went wrong");
+      const errorData = error?.response?.data;
+      if (errorData?.isVerified === false) {
+        localStorage.setItem("emailForVerification", form.email);
+
+        try {
+          await axiosInstance.post("/api/auth/send-otp", {
+            email: form.email,
+          });
+
+          toast.info("Email not verified. OTP sent again.");
+        } catch (err) {
+          toast.error("Failed to resend OTP");
+        }
+
+        navigate("/email-verify");
+        return;
+      }
+
+      toast.error(errorData?.message || "Something went wrong");
     }
   };
 
