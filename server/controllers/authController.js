@@ -128,12 +128,31 @@ export const login = async (req, res) => {
 // logout user
 export const logout = async (req, res) => {
   try {
-    if (req.userId) {
-      await userModel.findByIdAndUpdate(req.userId, {
-        refreshToken: ""
-      });
+    
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (refreshToken) {
+      try {
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+        const user = await userModel.findById(decoded?.userId);
+
+        if (user?.refreshToken) {
+          const isRefreshTokenValid = await bcrypt.compare(
+            refreshToken,
+            user.refreshToken
+          );
+
+          if (isRefreshTokenValid) {
+            user.refreshToken = "";
+            await user.save();
+          }
+        }
+      } catch (e) {
+        
+      }
     }
 
+    //  clear refresh cookie on logout.
     res.clearCookie("refreshToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -142,7 +161,7 @@ export const logout = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "User logged out successfully"
+      message: "User logged out successfully",
     });
 
   } catch (error) {

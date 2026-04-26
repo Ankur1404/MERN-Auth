@@ -3,10 +3,8 @@ import { createContext, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 export const AuthContext = createContext(null);
 import { useNavigate } from "react-router-dom";
-import axiosInstance from "../../services/axiosInstance";
+import axiosInstance, { backendurl } from "../../services/axiosInstance";
 import { setAccessToken, clearAccessToken } from "../../utils/tokenStorage";
-
-const backendurl = import.meta.env.VITE_BACKEND_URL;
 
 export const AuthContextProvider = ({ children }) => {
   const navigate = useNavigate();
@@ -86,6 +84,7 @@ const getUserProfile = async () => {
   const value = {
     backendurl,
     isLoggedIn,
+    isLoading,
     setIsLoggedIn,
     userData,
     setUserData,

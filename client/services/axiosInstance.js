@@ -1,7 +1,20 @@
 import axios from "axios";
 import { getAccessToken, setAccessToken, clearAccessToken } from "../utils/tokenStorage";
 
-const backendurl = import.meta.env.VITE_BACKEND_URL;
+const normalizeBackendUrl = (rawUrl) => {
+  if (!rawUrl) return "";
+
+  const cleaned = String(rawUrl).trim().replace(/^['"]|['"]$/g, "");
+  if (!cleaned) return "";
+
+  if (/^https?:\/\//i.test(cleaned)) {
+    return cleaned.replace(/\/+$/, "");
+  }
+
+  return `https://${cleaned.replace(/^\/+/, "").replace(/\/+$/, "")}`;
+};
+
+export const backendurl = normalizeBackendUrl(import.meta.env.VITE_BACKEND_URL);
 
 const axiosInstance = axios.create({
   baseURL: backendurl,

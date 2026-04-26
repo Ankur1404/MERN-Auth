@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { AuthContext } from "../context/authContext";
 import { toast } from "react-toastify";
-import axios from 'axios'
+import axiosInstance from "../../services/axiosInstance";
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
@@ -16,8 +16,7 @@ export default function Navbar() {
 
   const sendVerificationOtp = async()=>{
     try{
-      axios.defaults.withCredentials = true;
-      const {data} = await axios.post(backendurl + '/api/auth/send-otp')
+      const {data} = await axiosInstance.post("/api/auth/send-otp")
       if(data.success)
       {
         navigate('/email-verify')
@@ -32,8 +31,7 @@ export default function Navbar() {
 
   const logout = async() =>{
     try{
-      axios.defaults.withCredentials = true
-      const {data} = await axios.post(backendurl + '/api/auth/logout')
+      const {data} = await axiosInstance.post("/api/auth/logout")
         data.success && setIsLoggedIn(false)
         data.success && setUserData(false)
         navigate('/')
